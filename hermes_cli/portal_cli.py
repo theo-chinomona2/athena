@@ -26,9 +26,9 @@ import webbrowser
 from hermes_cli.colors import Colors, color
 from hermes_cli.config import load_config
 
-DEFAULT_PORTAL_URL = "https://portal.nousresearch.com"
-SUBSCRIPTION_URL = "https://portal.nousresearch.com/manage-subscription"
-DOCS_URL = "https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway"
+DEFAULT_PORTAL_URL = ""
+SUBSCRIPTION_URL = ""
+DOCS_URL = "https://athena.sentiolangley.me/docs/"
 
 
 def _cmd_status(args) -> int:

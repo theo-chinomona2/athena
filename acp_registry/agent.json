@@ -1,11 +1,11 @@
 {
-  "id": "hermes-agent",
-  "name": "Hermes Agent",
+  "id": "athena-agent",
+  "name": "Athena",
   "version": "0.16.0",
-  "description": "Self-improving open-source AI agent by Nous Research with ACP editor integration, persistent memory, skills, and rich tool support.",
-  "repository": "https://github.com/NousResearch/hermes-agent",
-  "website": "https://hermes-agent.nousresearch.com/docs/user-guide/features/acp",
-  "authors": ["Nous Research"],
+  "description": "Self-improving open-source AI agent by Sentio Langley with ACP editor integration, persistent memory, skills, and rich tool support.",
+  "repository": "https://github.com/theo-chinomona2/athena",
+  "website": "https://athena.sentiolangley.me",
+  "authors": ["Sentio Langley"],
   "license": "MIT",
   "distribution": {
     "uvx": {
