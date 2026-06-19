@@ -89,10 +89,16 @@ jobs:
   publish:
     name: Publish to PyPI
     needs: build
+    # Publishing is OPT-IN on this fork. To enable: set repo variable
+    # PYPI_PUBLISH_ENABLED=true AND (1) rename the package in pyproject.toml to a
+    # name you own, (2) configure PyPI Trusted Publishing for
+    # theo-chinomona2/hermes-agent (or add a token). Until then tag pushes still
+    # build the wheel artifact but skip publishing (no failures).
+    if: github.repository == 'theo-chinomona2/hermes-agent' && vars.PYPI_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/hermes-agent
+      url: https://pypi.org/p/hermes-agent  # TODO: change to your own PyPI package name
     permissions:
       id-token: write  # OIDC trusted publishing
 
