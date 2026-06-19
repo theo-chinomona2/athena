@@ -5334,7 +5334,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 success = await self._connect_adapter_with_timeout(adapter, platform)
                 if success:
                     self.adapters[platform] = adapter
-                    adapter._tenant_config = self._tenant_config
+                    adapter._tenant_config = getattr(self, "_tenant_config", None)
                     self._sync_voice_mode_state_to_adapter(adapter)
                     connected_count += 1
                     self._update_platform_runtime_status(
@@ -6071,7 +6071,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     success = await self._connect_adapter_with_timeout(adapter, platform)
                     if success:
                         self.adapters[platform] = adapter
-                        adapter._tenant_config = self._tenant_config
+                        adapter._tenant_config = getattr(self, "_tenant_config", None)
                         self._sync_voice_mode_state_to_adapter(adapter)
                         self.delivery_router.adapters = self.adapters
                         del self._failed_platforms[platform]
@@ -9862,9 +9862,10 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         Only applies when the message originates in a thread.  In per-user
         thread mode (``thread_sessions_per_user=True``) each participant gets
         an isolated session key of the form
-        ``agent:main:{platform}:{chat_type}:{chat_id}:{thread_id}:{user_id}``,
-        so a run started by another user is invisible to the caller's own
-        ``/stop``.  This returns the keys of any *actually running* agents
+        ``agent:{agent_id}:{platform}:{chat_type}:{chat_id}:{thread_id}:{user_id}``
+        (``agent_id`` = tenant triple, legacy ``main.main.main``), so a run
+        started by another user is invisible to the caller's own ``/stop``.
+        This returns the keys of any *actually running* agents
         (not the pending sentinel, not the caller's own key) whose key shares
         the caller's ``{chat_id}:{thread_id}`` prefix.
 
@@ -9883,7 +9884,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         # (prefix + ":") avoids cross-matching an unrelated thread whose id
         # merely starts with this one.
         prefix = ":".join(
-            ["agent:main", platform, chat_type, str(chat_id), str(thread_id)]
+            [f"agent:{self._agent_id_for_source(source)}", platform, chat_type, str(chat_id), str(thread_id)]
         )
         matches = []
         for key, agent in list(self._running_agents.items()):
@@ -14822,6 +14823,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             _identity = self._resolve_identity(source)
             _tenant_id_for_agent = None
             _memory_root_for_agent = None
+            _effective_toolsets = enabled_toolsets
             if _identity is not None:
                 try:
                     from gateway.tenancy import memory_path
@@ -14829,7 +14831,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     from hermes_constants import get_hermes_home
                     _tenant_id_for_agent = _identity.tenant
                     _memory_root_for_agent = memory_path(get_hermes_home(), _identity)
-                    enabled_toolsets = [toolset_name_for_role(_identity.role)]
+                    _effective_toolsets = [toolset_name_for_role(_identity.role)]
                 except Exception:
                     logger.debug("tenant runtime scoping failed", exc_info=True)
 
@@ -14839,7 +14841,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             _sig = self._agent_config_signature(
                 turn_route["model"],
                 turn_route["runtime"],
-                enabled_toolsets,
+                _effective_toolsets,
                 combined_ephemeral,
                 cache_keys=self._extract_cache_busting_config(user_config),
                 user_id=getattr(source, "user_id", None),
@@ -14909,7 +14911,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     max_iterations=max_iterations,
                     quiet_mode=True,
                     verbose_logging=False,
-                    enabled_toolsets=enabled_toolsets,
+                    enabled_toolsets=_effective_toolsets,
                     disabled_toolsets=disabled_toolsets,
                     ephemeral_system_prompt=combined_ephemeral or None,
                     prefill_messages=self._prefill_messages or None,

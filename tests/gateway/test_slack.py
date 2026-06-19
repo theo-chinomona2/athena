@@ -2639,7 +2639,7 @@ class TestThreadReplyHandling:
     ):
         """Thread replies without mention should be processed if there's an active session."""
         # Simulate an active session for this thread
-        session_key = "agent:main:slack:group:C123:123.000:U_USER"
+        session_key = "agent:main.main.main:slack:group:C123:123.000:U_USER"
         mock_session_store._entries = {session_key: MagicMock()}
 
         event = {
@@ -2664,7 +2664,7 @@ class TestThreadReplyHandling:
     ):
         """Thread replies with @mention should still strip the bot ID."""
         # Even with a session, mentions should be stripped
-        session_key = "agent:main:slack:group:C123:123.000:U_USER"
+        session_key = "agent:main.main.main:slack:group:C123:123.000:U_USER"
         mock_session_store._entries = {session_key: MagicMock()}
 
         event = {
@@ -2689,7 +2689,7 @@ class TestThreadReplyHandling:
     ):
         """Top-level channel messages should require mention even if session exists."""
         # Session exists but this is a top-level message (no thread_ts)
-        session_key = "agent:main:slack:group:C123:123.000:U_USER"
+        session_key = "agent:main.main.main:slack:group:C123:123.000:U_USER"
         mock_session_store._entries = {session_key: MagicMock()}
 
         event = {

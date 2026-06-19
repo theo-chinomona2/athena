@@ -166,7 +166,7 @@ def test_non_forum_group_reply_thread_id_does_not_fork_session_key():
     assert event.source.chat_id == "-100123"
     assert event.source.chat_type == "group"
     assert event.source.thread_id is None
-    assert build_session_key(event.source) == "agent:main:telegram:group:-100123:456"
+    assert build_session_key(event.source) == "agent:main.main.main:telegram:group:-100123:456"
 
 
 def test_forum_group_topic_message_preserves_thread_session_key():
@@ -196,7 +196,7 @@ def test_forum_group_topic_message_preserves_thread_session_key():
     assert event.source.chat_id == "-100123"
     assert event.source.chat_type == "group"
     assert event.source.thread_id == "17585"
-    assert build_session_key(event.source) == "agent:main:telegram:group:-100123:17585"
+    assert build_session_key(event.source) == "agent:main.main.main:telegram:group:-100123:17585"
 
 
 def test_forum_general_topic_without_message_thread_id_keeps_thread_context():
