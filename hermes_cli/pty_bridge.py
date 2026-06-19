@@ -118,13 +118,27 @@ class PtyBridge:
         env: Optional[dict] = None,
         cols: int = 80,
         rows: int = 24,
+        role: str = "operator",
     ) -> "PtyBridge":
         """Spawn ``argv`` behind a new PTY and return a bridge.
 
         Raises :class:`PtyUnavailableError` if the platform can't host a
         PTY.  Raises :class:`FileNotFoundError` or :class:`OSError` for
         ordinary exec failures (missing binary, bad cwd, etc.).
+
+        Raises :class:`PermissionError` when ``role`` is not ``"operator"`` —
+        the host PTY is a raw shell that tenants must never reach.
         """
+        # PTY is a raw HOST shell — non-operator roles (tenant_admin, client)
+        # must never reach it until per-tenant Docker sandboxing (Task 13) lands.
+        # v3 unlock path: once DockerEnvironment.spawn_in_tenant_container()
+        # exists, tenant roles may get a PTY spawned INSIDE the container only.
+        # Deny-first (before the platform probe) so the contract holds everywhere.
+        if role not in ("operator",):
+            raise PermissionError(
+                f"PTY access denied for role '{role}'. "
+                "Tenant PTY requires v3 Docker sandboxing (not yet deployed)."
+            )
         if not _PTY_AVAILABLE:
             if sys.platform.startswith("win"):
                 raise PtyUnavailableError(

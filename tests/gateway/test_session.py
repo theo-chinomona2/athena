@@ -656,7 +656,7 @@ class TestWhatsAppSessionKeyConsistency:
             user_name="Phone User",
         )
         key = build_session_key(source)
-        assert key == "agent:main:whatsapp:dm:15551234567"
+        assert key == "agent:main.main.main:whatsapp:dm:15551234567"
 
     def test_whatsapp_dm_aliases_share_one_session_key(self, tmp_path, monkeypatch):
         tmp_home = tmp_path / "hermes-home"
@@ -681,8 +681,8 @@ class TestWhatsAppSessionKeyConsistency:
             user_name="Phone User",
         )
 
-        assert build_session_key(lid_source) == "agent:main:whatsapp:dm:15551234567"
-        assert build_session_key(phone_source) == "agent:main:whatsapp:dm:15551234567"
+        assert build_session_key(lid_source) == "agent:main.main.main:whatsapp:dm:15551234567"
+        assert build_session_key(phone_source) == "agent:main.main.main:whatsapp:dm:15551234567"
 
     def test_whatsapp_group_participant_aliases_share_session_key(self, tmp_path, monkeypatch):
         """With group_sessions_per_user, the same human flipping between
@@ -712,7 +712,7 @@ class TestWhatsAppSessionKeyConsistency:
             user_name="Group Member",
         )
 
-        expected = "agent:main:whatsapp:group:120363000000000000@g.us:15551234567"
+        expected = "agent:main.main.main:whatsapp:group:120363000000000000@g.us:15551234567"
         assert build_session_key(lid_source, group_sessions_per_user=True) == expected
         assert build_session_key(phone_source, group_sessions_per_user=True) == expected
 
@@ -728,7 +728,7 @@ class TestWhatsAppSessionKeyConsistency:
         )
         assert (
             build_session_key(source, group_sessions_per_user=False)
-            == "agent:main:whatsapp:group:120363000000000000@g.us"
+            == "agent:main.main.main:whatsapp:group:120363000000000000@g.us"
         )
 
     def test_store_delegates_to_build_session_key(self, store):
@@ -760,8 +760,8 @@ class TestWhatsAppSessionKeyConsistency:
         first_entry = store.get_or_create_session(first)
         second_entry = store.get_or_create_session(second)
 
-        assert first_entry.session_key == "agent:main:discord:group:guild-123:alice"
-        assert second_entry.session_key == "agent:main:discord:group:guild-123:bob"
+        assert first_entry.session_key == "agent:main.main.main:discord:group:guild-123:alice"
+        assert second_entry.session_key == "agent:main.main.main:discord:group:guild-123:bob"
         assert first_entry.session_id != second_entry.session_id
 
     def test_store_shares_group_sessions_when_disabled_in_config(self, store):
@@ -785,8 +785,8 @@ class TestWhatsAppSessionKeyConsistency:
         first_entry = store.get_or_create_session(first)
         second_entry = store.get_or_create_session(second)
 
-        assert first_entry.session_key == "agent:main:discord:group:guild-123"
-        assert second_entry.session_key == "agent:main:discord:group:guild-123"
+        assert first_entry.session_key == "agent:main.main.main:discord:group:guild-123"
+        assert second_entry.session_key == "agent:main.main.main:discord:group:guild-123"
         assert first_entry.session_id == second_entry.session_id
 
     def test_telegram_dm_includes_chat_id(self):
@@ -797,15 +797,15 @@ class TestWhatsAppSessionKeyConsistency:
             chat_type="dm",
         )
         key = build_session_key(source)
-        assert key == "agent:main:telegram:dm:99"
+        assert key == "agent:main.main.main:telegram:dm:99"
 
     def test_distinct_dm_chat_ids_get_distinct_session_keys(self):
         """Different DM chats must not collapse into one shared session."""
         first = SessionSource(platform=Platform.TELEGRAM, chat_id="99", chat_type="dm")
         second = SessionSource(platform=Platform.TELEGRAM, chat_id="100", chat_type="dm")
 
-        assert build_session_key(first) == "agent:main:telegram:dm:99"
-        assert build_session_key(second) == "agent:main:telegram:dm:100"
+        assert build_session_key(first) == "agent:main.main.main:telegram:dm:99"
+        assert build_session_key(second) == "agent:main.main.main:telegram:dm:100"
         assert build_session_key(first) != build_session_key(second)
 
     def test_dm_without_chat_id_falls_back_to_user_id(self):
@@ -817,7 +817,7 @@ class TestWhatsAppSessionKeyConsistency:
             chat_type="dm",
             user_id="jordan",
         )
-        assert build_session_key(source) == "agent:main:telegram:dm:jordan"
+        assert build_session_key(source) == "agent:main.main.main:telegram:dm:jordan"
 
     def test_dm_without_chat_id_distinct_users_do_not_collide(self):
         """Two different DM senders without chat_id must not share one
@@ -829,8 +829,8 @@ class TestWhatsAppSessionKeyConsistency:
             platform=Platform.TELEGRAM, chat_id="", chat_type="dm", user_id="dima"
         )
         assert build_session_key(first) != build_session_key(second)
-        assert build_session_key(first) == "agent:main:telegram:dm:jordan"
-        assert build_session_key(second) == "agent:main:telegram:dm:dima"
+        assert build_session_key(first) == "agent:main.main.main:telegram:dm:jordan"
+        assert build_session_key(second) == "agent:main.main.main:telegram:dm:dima"
 
     def test_dm_without_chat_id_prefers_user_id_alt(self):
         """user_id_alt wins over user_id for the DM fallback, matching the
@@ -842,7 +842,7 @@ class TestWhatsAppSessionKeyConsistency:
             user_id="primary",
             user_id_alt="alt",
         )
-        assert build_session_key(source) == "agent:main:telegram:dm:alt"
+        assert build_session_key(source) == "agent:main.main.main:telegram:dm:alt"
 
     def test_dm_without_chat_id_or_user_id_falls_back_to_thread_then_sink(self):
         """With neither chat_id nor user identifiers, thread_id is the next
@@ -850,10 +850,10 @@ class TestWhatsAppSessionKeyConsistency:
         threaded = SessionSource(
             platform=Platform.TELEGRAM, chat_id="", chat_type="dm", thread_id="7"
         )
-        assert build_session_key(threaded) == "agent:main:telegram:dm:7"
+        assert build_session_key(threaded) == "agent:main.main.main:telegram:dm:7"
 
         bare = SessionSource(platform=Platform.TELEGRAM, chat_id="", chat_type="dm")
-        assert build_session_key(bare) == "agent:main:telegram:dm"
+        assert build_session_key(bare) == "agent:main.main.main:telegram:dm"
 
     def test_discord_group_includes_chat_id(self):
         """Group/channel keys include chat_type and chat_id."""
@@ -863,7 +863,7 @@ class TestWhatsAppSessionKeyConsistency:
             chat_type="group",
         )
         key = build_session_key(source)
-        assert key == "agent:main:discord:group:guild-123"
+        assert key == "agent:main.main.main:discord:group:guild-123"
 
     def test_group_sessions_are_isolated_per_user_when_user_id_present(self):
         first = SessionSource(
@@ -879,8 +879,8 @@ class TestWhatsAppSessionKeyConsistency:
             user_id="bob",
         )
 
-        assert build_session_key(first) == "agent:main:discord:group:guild-123:alice"
-        assert build_session_key(second) == "agent:main:discord:group:guild-123:bob"
+        assert build_session_key(first) == "agent:main.main.main:discord:group:guild-123:alice"
+        assert build_session_key(second) == "agent:main.main.main:discord:group:guild-123:bob"
         assert build_session_key(first) != build_session_key(second)
 
     def test_group_sessions_can_be_shared_when_isolation_disabled(self):
@@ -897,8 +897,8 @@ class TestWhatsAppSessionKeyConsistency:
             user_id="bob",
         )
 
-        assert build_session_key(first, group_sessions_per_user=False) == "agent:main:discord:group:guild-123"
-        assert build_session_key(second, group_sessions_per_user=False) == "agent:main:discord:group:guild-123"
+        assert build_session_key(first, group_sessions_per_user=False) == "agent:main.main.main:discord:group:guild-123"
+        assert build_session_key(second, group_sessions_per_user=False) == "agent:main.main.main:discord:group:guild-123"
 
     def test_group_thread_includes_thread_id(self):
         """Forum-style threads need a distinct session key within one group."""
@@ -909,7 +909,7 @@ class TestWhatsAppSessionKeyConsistency:
             thread_id="17585",
         )
         key = build_session_key(source)
-        assert key == "agent:main:telegram:group:-1002285219667:17585"
+        assert key == "agent:main.main.main:telegram:group:-1002285219667:17585"
 
     def test_group_thread_sessions_are_shared_by_default(self):
         """Threads default to shared sessions — user_id is NOT appended."""
@@ -927,8 +927,8 @@ class TestWhatsAppSessionKeyConsistency:
             thread_id="17585",
             user_id="bob",
         )
-        assert build_session_key(alice) == "agent:main:telegram:group:-1002285219667:17585"
-        assert build_session_key(bob) == "agent:main:telegram:group:-1002285219667:17585"
+        assert build_session_key(alice) == "agent:main.main.main:telegram:group:-1002285219667:17585"
+        assert build_session_key(bob) == "agent:main.main.main:telegram:group:-1002285219667:17585"
         assert build_session_key(alice) == build_session_key(bob)
 
     def test_group_thread_sessions_can_be_isolated_per_user(self):
@@ -941,7 +941,7 @@ class TestWhatsAppSessionKeyConsistency:
             user_id="42",
         )
         key = build_session_key(source, thread_sessions_per_user=True)
-        assert key == "agent:main:telegram:group:-1002285219667:17585:42"
+        assert key == "agent:main.main.main:telegram:group:-1002285219667:17585:42"
 
     def test_non_thread_group_sessions_still_isolated_per_user(self):
         """Regular group messages (no thread_id) remain per-user by default."""
@@ -957,8 +957,8 @@ class TestWhatsAppSessionKeyConsistency:
             chat_type="group",
             user_id="bob",
         )
-        assert build_session_key(alice) == "agent:main:telegram:group:-1002285219667:alice"
-        assert build_session_key(bob) == "agent:main:telegram:group:-1002285219667:bob"
+        assert build_session_key(alice) == "agent:main.main.main:telegram:group:-1002285219667:alice"
+        assert build_session_key(bob) == "agent:main.main.main:telegram:group:-1002285219667:bob"
         assert build_session_key(alice) != build_session_key(bob)
 
     def test_discord_thread_sessions_shared_by_default(self):
@@ -992,7 +992,7 @@ class TestWhatsAppSessionKeyConsistency:
         )
         key = build_session_key(source)
         # DM logic: chat_id + thread_id, user_id never included
-        assert key == "agent:main:telegram:dm:99:topic-1"
+        assert key == "agent:main.main.main:telegram:dm:99:topic-1"
 
 
 class TestWhatsAppIdentifierPublicHelpers:

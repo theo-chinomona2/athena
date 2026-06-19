@@ -93,7 +93,7 @@ class TestSlackExecApproval:
         result = await adapter.send_exec_approval(
             chat_id="C1",
             command="rm -rf /important",
-            session_key="agent:main:slack:group:C1:1111",
+            session_key="agent:main.main.main:slack:group:C1:1111",
             description="dangerous deletion",
         )
 
@@ -119,7 +119,7 @@ class TestSlackExecApproval:
         assert "hermes_deny" in action_ids
         # Each button carries the session key as value
         for e in elements:
-            assert e["value"] == "agent:main:slack:group:C1:1111"
+            assert e["value"] == "agent:main.main.main:slack:group:C1:1111"
 
     @pytest.mark.asyncio
     async def test_sends_in_thread(self):
@@ -190,7 +190,7 @@ class TestSlackApprovalAction:
         }
         action = {
             "action_id": "hermes_approve_once",
-            "value": "agent:main:slack:group:C1:1111",
+            "value": "agent:main.main.main:slack:group:C1:1111",
         }
 
         mock_client = adapter._team_clients["T1"]
@@ -200,7 +200,7 @@ class TestSlackApprovalAction:
             await adapter._handle_approval_action(ack, body, action)
 
         ack.assert_called_once()
-        mock_resolve.assert_called_once_with("agent:main:slack:group:C1:1111", "once")
+        mock_resolve.assert_called_once_with("agent:main.main.main:slack:group:C1:1111", "once")
 
         # Message should be updated with decision
         mock_client.chat_update.assert_called_once()
@@ -274,7 +274,7 @@ class TestSlackApprovalAction:
         }
         action = {
             "action_id": "hermes_approve_once",
-            "value": "agent:main:slack:group:C1:1111",
+            "value": "agent:main.main.main:slack:group:C1:1111",
         }
 
         with patch("tools.approval.resolve_gateway_approval") as mock_resolve:
@@ -331,7 +331,7 @@ class TestSlackSlashConfirmAction:
         }
         action = {
             "action_id": "hermes_confirm_once",
-            "value": "agent:main:slack:group:C1:1111|confirm-1",
+            "value": "agent:main.main.main:slack:group:C1:1111|confirm-1",
         }
 
         with patch("tools.slash_confirm.resolve", new=AsyncMock(return_value="follow-up")) as mock_resolve:
@@ -339,7 +339,7 @@ class TestSlackSlashConfirmAction:
 
         ack.assert_called_once()
         mock_resolve.assert_awaited_once_with(
-            "agent:main:slack:group:C1:1111",
+            "agent:main.main.main:slack:group:C1:1111",
             "confirm-1",
             "once",
         )
@@ -622,7 +622,7 @@ class TestSessionKeyFix:
         # Mock session store with a known entry
         mock_store = MagicMock()
         mock_store._entries = {
-            "agent:main:slack:group:C1:1000.0": MagicMock()
+            "agent:main.main.main:slack:group:C1:1000.0": MagicMock()
         }
         mock_store._ensure_loaded = MagicMock()
         mock_store.config = MagicMock()

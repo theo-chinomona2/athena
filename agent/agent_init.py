@@ -223,6 +223,9 @@ def init_agent(
     checkpoint_max_total_size_mb: int = 500,
     checkpoint_max_file_size_mb: int = 10,
     pass_session_id: bool = False,
+    tenant_id: str = None,
+    memory_root=None,
+    tenant_role: str = None,
 ):
     """
     Initialize the AI Agent.
@@ -304,6 +307,9 @@ def init_agent(
     agent.skip_context_files = skip_context_files
     agent.load_soul_identity = load_soul_identity
     agent.pass_session_id = pass_session_id
+    agent._tenant_id = tenant_id  # Tenant slug for recall/tool authz (None = single-tenant)
+    agent._memory_root = memory_root  # Per-identity memory root (None = global profile memory)
+    agent._tenant_role = tenant_role  # Role string for tool authz ("operator"/"tenant_admin"/"client")
     agent._credential_pool = credential_pool
     agent.log_prefix_chars = log_prefix_chars
     agent.log_prefix = f"{log_prefix} " if log_prefix else ""
@@ -1128,6 +1134,7 @@ def init_agent(
                 agent._memory_store = MemoryStore(
                     memory_char_limit=mem_config.get("memory_char_limit", 2200),
                     user_char_limit=mem_config.get("user_char_limit", 1375),
+                    identity_root=getattr(agent, "_memory_root", None),
                 )
                 agent._memory_store.load_from_disk()
         except Exception:

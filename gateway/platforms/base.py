@@ -1837,6 +1837,10 @@ class BasePlatformAdapter(ABC):
         self.config = config
         self.platform = platform
         self._message_handler: Optional[MessageHandler] = None
+        # Tenant config (set by GatewayRunner at adapter registration) so the
+        # adapter computes the SAME session-key agent_id triple as the runner.
+        # None = single-tenant -> agent_id "main.main.main" (legacy behavior).
+        self._tenant_config = None
         # Optional hook (e.g. Telegram DM topic recovery) that rewrites
         # ``event.source.thread_id`` before session keying. Returns the
         # corrected thread_id or None to leave the source untouched.
@@ -1903,6 +1907,19 @@ class BasePlatformAdapter(ABC):
         # Chats where typing indicator is paused (e.g. during approval waits).
         # _keep_typing skips send_typing when the chat_id is in this set.
         self._typing_paused: set = set()
+
+    def _agent_id_for_source(self, source) -> str:
+        """Return the session-key agent_id triple for a source.
+
+        Uses the runner-supplied tenant config so the adapter's session key
+        matches the runner's (no busy-guard / interrupt / pending-queue
+        split-brain).  Falls back to ``main.main.main`` when tenancy is off.
+        """
+        try:
+            from gateway.routing import agent_id_for_source
+            return agent_id_for_source(source, getattr(self, "_tenant_config", None))
+        except Exception:
+            return "main.main.main"
 
     @property
     def message_len_fn(self) -> Callable[[str], int]:
@@ -3945,6 +3962,7 @@ class BasePlatformAdapter(ABC):
             event.source,
             group_sessions_per_user=self.config.extra.get("group_sessions_per_user", True),
             thread_sessions_per_user=self.config.extra.get("thread_sessions_per_user", False),
+            agent_id=self._agent_id_for_source(event.source),
         )
 
         # On-entry self-heal: if the adapter still has an _active_sessions

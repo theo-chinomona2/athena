@@ -147,7 +147,7 @@ async def test_telegram_dm_isolates_by_chat_id(wired):
     dm_a = _tg_dm_event("dm-111", "userX", "hey")
     dm_b = _tg_dm_event("dm-222", "userY", "yo")
     assert build_session_key(dm_a.source) != build_session_key(dm_b.source)
-    assert build_session_key(dm_a.source).startswith("agent:main:telegram:dm:")
+    assert build_session_key(dm_a.source).startswith("agent:main.main.main:telegram:dm:")
 
 
 @pytest.mark.asyncio

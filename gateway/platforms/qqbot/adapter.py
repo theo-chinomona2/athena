@@ -1066,9 +1066,12 @@ class QQAdapter(BasePlatformAdapter):
 
     @staticmethod
     def _parse_gateway_session_key(session_key: str) -> Optional[Dict[str, str]]:
-        """Parse ``agent:main:<platform>:<chat_type>:<chat_id>[:<user_id>]``."""
+        """Parse ``agent:<agent_id>:<platform>:<chat_type>:<chat_id>[:<user_id>]``.
+
+        ``agent_id`` is the legacy ``main`` or a tenant triple ``tenant.member.agent``.
+        """
         parts = str(session_key or "").split(":")
-        if len(parts) < 5 or parts[0] != "agent" or parts[1] != "main":
+        if len(parts) < 5 or parts[0] != "agent" or not parts[1]:
             return None
         parsed = {
             "platform": parts[2],

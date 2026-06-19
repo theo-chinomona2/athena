@@ -88,6 +88,18 @@ def build_gateway_parser(
     add_accept_hooks_flag(gateway_run)
     add_accept_hooks_flag(gateway_parser)
 
+    # gateway migrate — backfill legacy sessions with the main.main.main identity
+    gateway_migrate = gateway_subparsers.add_parser(
+        "migrate",
+        help="Backfill pre-tenancy sessions with the main.main.main tenant identity",
+    )
+    gateway_migrate.add_argument(
+        "--db-path",
+        dest="db_path",
+        default=None,
+        help="Path to state.db (defaults to <HERMES_HOME>/state.db)",
+    )
+
     # gateway start
     gateway_start = gateway_subparsers.add_parser(
         "start", help="Start the installed systemd/launchd background service"

@@ -545,6 +545,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     handoff_error TEXT,
     rewind_count INTEGER NOT NULL DEFAULT 0,
     archived INTEGER NOT NULL DEFAULT 0,
+    tenant_id TEXT,
+    member_id TEXT,
+    agent_id TEXT,
+    tenant_session_key TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -596,6 +600,7 @@ CREATE INDEX IF NOT EXISTS idx_compression_locks_expires ON compression_locks(ex
 DEFERRED_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_messages_session_active
     ON messages(session_id, active, timestamp);
+CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id);
 """
 
 FTS_SQL = """
@@ -1345,13 +1350,18 @@ class SessionDB:
         user_id: str = None,
         parent_session_id: str = None,
         cwd: str = None,
+        tenant_id: str = None,
+        member_id: str = None,
+        agent_id: str = None,
+        session_key: str = None,
     ) -> None:
         """Shared INSERT OR IGNORE for session rows."""
         def _do(conn):
             conn.execute(
                 """INSERT OR IGNORE INTO sessions (id, source, user_id, model, model_config,
-                   system_prompt, parent_session_id, cwd, started_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   system_prompt, parent_session_id, cwd, started_at,
+                   tenant_id, member_id, agent_id, tenant_session_key)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     session_id,
                     source,
@@ -1362,6 +1372,10 @@ class SessionDB:
                     parent_session_id,
                     cwd,
                     time.time(),
+                    tenant_id,
+                    member_id,
+                    agent_id,
+                    session_key,
                 ),
             )
         self._execute_write(_do)
@@ -1753,14 +1767,24 @@ class SessionDB:
 
         return self._execute_write(_do) or 0
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get a session by ID."""
+    def get_session(self, session_id: str, tenant_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get a session by ID.
+
+        When ``tenant_id`` is provided, returns ``None`` unless the session's
+        ``tenant_id`` column matches — the recall-authz tenant gate.  Passing
+        ``tenant_id=None`` (operator / single-tenant) returns the row regardless.
+        """
         with self._lock:
             cursor = self._conn.execute(
                 "SELECT * FROM sessions WHERE id = ?", (session_id,)
             )
             row = cursor.fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        result = dict(row)
+        if tenant_id is not None and result.get("tenant_id") != tenant_id:
+            return None
+        return result
 
     def resolve_session_id(self, session_id_or_prefix: str) -> Optional[str]:
         """Resolve an exact or uniquely prefixed session ID to the full ID.
@@ -2048,6 +2072,7 @@ class SessionDB:
         include_archived: bool = False,
         archived_only: bool = False,
         id_query: str = None,
+        tenant_id: str = None,
     ) -> List[Dict[str, Any]]:
         """List sessions with preview (first user message) and last active timestamp.
 
@@ -2111,6 +2136,9 @@ class SessionDB:
             where_clauses.append("s.archived = 1")
         elif not include_archived:
             where_clauses.append("s.archived = 0")
+        if tenant_id is not None:
+            where_clauses.append("s.tenant_id = ?")
+            params.append(tenant_id)
 
         where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
@@ -3694,12 +3722,17 @@ class SessionDB:
         source: str = None,
         limit: int = 20,
         offset: int = 0,
+        tenant_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """List sessions, optionally filtered by source.
+        """List sessions, optionally filtered by source and/or tenant.
 
         Returns rows enriched with a computed ``last_active`` column (latest
         message timestamp for the session, falling back to ``started_at``),
         ordered by most-recently-used first.
+
+        When ``tenant_id`` is provided, only sessions belonging to that tenant
+        are returned — the recall-authz tenant gate.  ``tenant_id=None``
+        (operator / single-tenant) returns sessions across all tenants.
         """
         select_with_last_active = (
             "SELECT s.*, COALESCE(m.last_active, s.started_at) AS last_active "
@@ -3709,20 +3742,21 @@ class SessionDB:
             "FROM messages GROUP BY session_id"
             ") m ON m.session_id = s.id "
         )
+        clauses: List[str] = []
+        params: List[Any] = []
+        if source:
+            clauses.append("s.source = ?")
+            params.append(source)
+        if tenant_id is not None:
+            clauses.append("s.tenant_id = ?")
+            params.append(tenant_id)
+        where = ("WHERE " + " AND ".join(clauses) + " ") if clauses else ""
         with self._lock:
-            if source:
-                cursor = self._conn.execute(
-                    f"{select_with_last_active}"
-                    "WHERE s.source = ? "
-                    "ORDER BY last_active DESC, s.started_at DESC, s.id DESC LIMIT ? OFFSET ?",
-                    (source, limit, offset),
-                )
-            else:
-                cursor = self._conn.execute(
-                    f"{select_with_last_active}"
-                    "ORDER BY last_active DESC, s.started_at DESC, s.id DESC LIMIT ? OFFSET ?",
-                    (limit, offset),
-                )
+            cursor = self._conn.execute(
+                f"{select_with_last_active}{where}"
+                "ORDER BY last_active DESC, s.started_at DESC, s.id DESC LIMIT ? OFFSET ?",
+                params + [limit, offset],
+            )
             return [dict(row) for row in cursor.fetchall()]
 
     # =========================================================================

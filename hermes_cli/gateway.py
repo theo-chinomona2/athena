@@ -6532,6 +6532,14 @@ def _gateway_command_inner(args):
         gateway_setup()
         return
 
+    if subcmd == "migrate":
+        from hermes_cli.migration import migrate_main_sessions
+        from hermes_constants import get_hermes_home
+        db_path = getattr(args, "db_path", None) or str(get_hermes_home() / "state.db")
+        count = migrate_main_sessions(db_path)
+        print(f"Migrated {count} session(s) to the main.main.main tenant identity.")
+        return
+
     # Service management commands
     if subcmd == "install":
         if is_managed():

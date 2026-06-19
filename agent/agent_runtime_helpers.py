@@ -1833,6 +1833,11 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                     sort=next_args.get("sort"),
                     db=session_db,
                     current_session_id=agent.session_id,
+                    tenant_id=(
+                        None
+                        if getattr(agent, "_tenant_role", None) == "operator"
+                        else getattr(agent, "_tenant_id", None)
+                    ),
                 ),
                 next_args,
             )

@@ -3626,6 +3626,7 @@ class SlackAdapter(BasePlatformAdapter):
 
             session_key = build_session_key(
                 source,
+                agent_id=self._agent_id_for_source(source),
                 group_sessions_per_user=gspu,
                 thread_sessions_per_user=tspu,
             )

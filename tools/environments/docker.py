@@ -135,6 +135,40 @@ def _get_active_profile_name() -> str:
         return "default"
 
 
+def _default_mounts(hermes_home: Path) -> "list[dict]":
+    """Operator default mount set: full sandbox workspace + persistent home + host credentials.
+
+    This is the mount policy reference for operator-role containers — the
+    enforcement for real containers lives inline in ``DockerEnvironment.__init__``
+    (host cwd / sandbox / credential mounts), but this captures the contract:
+    operators get workspace + /root + host credentials.
+    """
+    sandbox = hermes_home / "sandboxes" / "default"
+    return [
+        {"type": "bind", "source": str(sandbox / "workspace"), "target": "/workspace", "read_only": False},
+        {"type": "bind", "source": str(sandbox / "home"), "target": "/root", "read_only": False},
+        {"type": "bind", "source": str(hermes_home / "credentials"), "target": "/credentials", "read_only": True},
+    ]
+
+
+def _build_mounts(identity, hermes_home: Path) -> "list[dict]":
+    """Mount-isolation policy for a tenant identity.
+
+    Operator (or no identity) → full ``_default_mounts`` (workspace + /root +
+    host credentials).  A non-operator tenant gets ONLY its own tenant
+    workspace bound to ``/workspace`` — no /root, no host credentials, no
+    global skills or cache — a hard filesystem wall between tenants.
+    """
+    from gateway.tenancy import Role, workspace_path
+
+    if identity is None or identity.role == Role.OPERATOR:
+        return _default_mounts(hermes_home)
+    ws = workspace_path(hermes_home, identity)
+    return [
+        {"type": "bind", "source": str(ws), "target": "/workspace", "read_only": False},
+    ]
+
+
 def reap_orphan_containers(
     *,
     max_age_seconds: int = 600,
@@ -531,6 +565,8 @@ class DockerEnvironment(BaseEnvironment):
         run_as_host_user: bool = False,
         extra_args: list = None,
         persist_across_processes: bool = True,
+        tenant_role: str = None,
+        tenant_id: str = None,
     ):
         if cwd == "~":
             cwd = "/root"
@@ -538,6 +574,8 @@ class DockerEnvironment(BaseEnvironment):
         self._persistent = persistent_filesystem
         self._persist_across_processes = persist_across_processes
         self._task_id = task_id
+        self._tenant_role = tenant_role
+        self._tenant_id = tenant_id
         self._forward_env = _normalize_forward_env_names(forward_env)
         self._env = _normalize_env_dict(env)
         self._container_id: Optional[str] = None
@@ -638,6 +676,12 @@ class DockerEnvironment(BaseEnvironment):
 
         # Mount credential files (OAuth tokens, etc.) declared by skills.
         # Read-only so the container can authenticate but not modify host creds.
+        #
+        # TENANCY: host credentials, global skills, and host cache directories
+        # are operator-only.  A non-operator tenant's container gets NONE of
+        # them — it sees only its own /workspace — so it can never read another
+        # tenant's (or the operator's) secrets, skills, or cached media.
+        _mount_host_resources = self._tenant_role in (None, "operator")
         try:
             from tools.credential_files import (
                 get_credential_file_mounts,
@@ -645,7 +689,7 @@ class DockerEnvironment(BaseEnvironment):
                 get_cache_directory_mounts,
             )
 
-            for mount_entry in get_credential_file_mounts():
+            for mount_entry in (get_credential_file_mounts() if _mount_host_resources else []):
                 src = Path(mount_entry["host_path"])
                 if src.is_dir():
                     # Docker-in-Docker: Docker auto-created the source path as
@@ -674,7 +718,7 @@ class DockerEnvironment(BaseEnvironment):
 
             # Mount skill directories (local + external) so skill
             # scripts/templates are available inside the container.
-            for skills_mount in get_skills_directory_mount():
+            for skills_mount in (get_skills_directory_mount() if _mount_host_resources else []):
                 src = Path(skills_mount["host_path"])
                 if not src.is_dir():
                     logger.warning(
@@ -696,7 +740,7 @@ class DockerEnvironment(BaseEnvironment):
             # screenshots) so the agent can access uploaded files and other
             # cached media from inside the container.  Read-only — the
             # container reads these but the host gateway manages writes.
-            for cache_mount in get_cache_directory_mounts():
+            for cache_mount in (get_cache_directory_mounts() if _mount_host_resources else []):
                 src = Path(cache_mount["host_path"])
                 if not src.is_dir():
                     logger.warning(

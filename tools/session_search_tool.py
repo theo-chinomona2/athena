@@ -175,7 +175,7 @@ def _locate_session_db(session_id: str):
     return None, None
 
 
-def _read_session(db, session_id: str, head: int = 20, tail: int = 10) -> str:
+def _read_session(db, session_id: str, head: int = 20, tail: int = 10, tenant_id: str = None) -> str:
     """Read shape: dump a whole session by id (head + tail when large).
 
     Serves the linked-session case — the user dropped an @session reference and
@@ -184,7 +184,7 @@ def _read_session(db, session_id: str, head: int = 20, tail: int = 10) -> str:
     pointer to scroll the middle.
     """
     try:
-        meta = db.get_session(session_id) or {}
+        meta = db.get_session(session_id, tenant_id=tenant_id) or {}
     except Exception as e:
         logging.debug("get_session failed for %s: %s", session_id, e, exc_info=True)
         meta = {}
@@ -224,13 +224,14 @@ def _read_session(db, session_id: str, head: int = 20, tail: int = 10) -> str:
     return json.dumps(response, ensure_ascii=False)
 
 
-def _list_recent_sessions(db, limit: int, current_session_id: str = None) -> str:
+def _list_recent_sessions(db, limit: int, current_session_id: str = None, tenant_id: str = None) -> str:
     """Return metadata for the most recent sessions (no LLM calls, no FTS5)."""
     try:
         sessions = db.list_sessions_rich(
             limit=limit + 5,
             exclude_sources=list(_HIDDEN_SESSION_SOURCES),
             order_by_last_active=True,
+            tenant_id=tenant_id,
         )  # fetch extra so we can skip current
 
         current_root = _resolve_to_parent(db, current_session_id) if current_session_id else None
@@ -273,6 +274,7 @@ def _scroll(
     around_message_id: int,
     window: int = 5,
     current_session_id: str = None,
+    tenant_id: str = None,
 ) -> str:
     """Scroll shape: return a window of messages centered on an anchor.
 
@@ -310,7 +312,7 @@ def _scroll(
 
     # Session existence check
     try:
-        session_meta = db.get_session(session_id) or {}
+        session_meta = db.get_session(session_id, tenant_id=tenant_id) or {}
     except Exception as e:
         logging.debug("get_session failed for %s: %s", session_id, e, exc_info=True)
         session_meta = {}
@@ -357,7 +359,7 @@ def _scroll(
                             f"(child of {session_id}); rebound transparently"
                         )
                         try:
-                            session_meta = db.get_session(owning) or session_meta
+                            session_meta = db.get_session(owning, tenant_id=tenant_id) or session_meta
                         except Exception:
                             pass
                         session_id = owning
@@ -398,6 +400,7 @@ def _discover(
     limit: int,
     sort: Optional[str],
     current_session_id: str = None,
+    tenant_id: str = None,
 ) -> str:
     """Discovery shape: FTS5 + anchored window + bookends per hit. Single call."""
     role_list = role_filter if role_filter else ["user", "assistant"]
@@ -457,9 +460,13 @@ def _discover(
             continue
 
         try:
-            session_meta = db.get_session(lineage_root) or {}
+            session_meta = db.get_session(lineage_root, tenant_id=tenant_id) or {}
         except Exception:
             session_meta = {}
+        # Tenant gate: a hit whose owning session belongs to another tenant
+        # has no readable meta — drop it from cross-tenant search results.
+        if tenant_id is not None and not session_meta:
+            continue
 
         entry = {
             "session_id": hit_sid,
@@ -506,6 +513,7 @@ def session_search(
     sort: str = None,
     # Cross-profile (any shape)
     profile: str = None,
+    tenant_id: str = None,
 ) -> str:
     """Single-shape tool. Mode inferred from which args are set.
 
@@ -542,6 +550,9 @@ def session_search(
     # Cross-profile read: swap in the named profile's DB (read-only) for every
     # shape below. The current-session-lineage guards no longer apply across
     # profiles, but they key off ids that won't collide, so they stay inert.
+    # Tenants may never read another profile's DB — cross-profile is operator-only.
+    if tenant_id is not None and profile is not None and str(profile).strip():
+        return tool_error("Cross-profile session access is restricted.", success=False)
     if profile is not None and str(profile).strip():
         try:
             profile_db = _resolve_profile_db(profile)
@@ -559,18 +570,22 @@ def session_search(
             around_message_id=around_message_id,
             window=window,
             current_session_id=current_session_id,
+            tenant_id=tenant_id,
         )
 
     # Read shape: a session_id with no anchor → dump the whole session.
     if isinstance(session_id, str) and session_id.strip():
         sid = session_id.strip()
-        result = _read_session(db, sid)
+        result = _read_session(db, sid, tenant_id=tenant_id)
         if json.loads(result).get("success"):
             return result
 
         # Miss in the target profile — the model may have dropped the owning
         # profile from the link. Scan every profile and read it from wherever
         # it lives, tagging the profile it was found in.
+        # Cross-profile locate scans every profile's DB — operator-only.
+        if tenant_id is not None:
+            return result
         located, owner = _locate_session_db(sid)
         if located is not None:
             try:
@@ -592,7 +607,7 @@ def session_search(
 
     # Browse shape: no query → recent sessions.
     if not query or not isinstance(query, str) or not query.strip():
-        return _list_recent_sessions(db, limit, current_session_id)
+        return _list_recent_sessions(db, limit, current_session_id, tenant_id=tenant_id)
 
     # Parse role_filter
     role_list: Optional[List[str]] = None
@@ -613,6 +628,7 @@ def session_search(
         limit=limit,
         sort=sort_norm,
         current_session_id=current_session_id,
+        tenant_id=tenant_id,
     )
 
 

@@ -67,6 +67,7 @@ jobs:
         working-directory: apps/bootstrap-installer
 
       - name: Azure login (OIDC)
+        if: vars.AZURE_SIGNING_ENDPOINT != ''
         uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5  # v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -74,6 +75,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Sign Hermes-Setup.exe with Azure Artifact Signing
+        if: vars.AZURE_SIGNING_ENDPOINT != ''
         uses: azure/artifact-signing-action@c7ab2a863ab5f9a846ddb8265964877ef296ee82  # v2
         with:
           endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
