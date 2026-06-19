@@ -72,7 +72,7 @@ def _check_rate_limit(tenant: str) -> bool:
 def _write_audit(hermes_home: Path, entry: dict) -> None:
     log_path = hermes_home / "audit" / "relay.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a") as f:
+    with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
 
 
