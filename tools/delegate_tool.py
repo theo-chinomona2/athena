@@ -1238,6 +1238,11 @@ def _build_child_agent(
         openrouter_min_coding_score=child_openrouter_min_coding_score,
         tool_progress_callback=child_progress_cb,
         iteration_budget=None,  # fresh budget per subagent
+        # Tenant pinning: child inherits parent's tenant id + memory root so it
+        # can never reach another tenant's data; enabled_toolsets is already
+        # derived from the parent (child_toolsets) so no role escalation.
+        tenant_id=getattr(parent_agent, "_tenant_id", None),
+        memory_root=getattr(parent_agent, "_memory_root", None),
     )
     child._print_fn = getattr(parent_agent, "_print_fn", None)
     # Now the child exists, its session id can ride on every relayed event
