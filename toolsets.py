@@ -571,8 +571,58 @@ TOOLSETS = {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
         "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook", "hermes-yuanbao"]
-    }
+    },
+
+    "client_curated": {
+        "description": "Tenant client toolset — curated assistant only; developer tools denied",
+        "tools": [
+            "web_search", "web_extract",
+            "vision_analyze", "image_generate",
+            "browser_navigate", "browser_snapshot",
+            "todo", "memory", "clarify",
+            "relay_message",
+        ],
+        "includes": [],
+    },
+    "tenant_admin_bundle": {
+        "description": "Tenant admin toolset — curated + session browsing + own-tenant management",
+        "tools": [
+            "web_search", "web_extract", "read_file",
+            "vision_analyze", "image_generate",
+            "skills_list", "skill_view",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images", "browser_vision",
+            "todo", "memory", "session_search", "clarify",
+            "relay_message",
+        ],
+        "includes": [],
+    },
+    "operator_bundle": {
+        "description": "Operator toolset — full access including developer tools",
+        "tools": _HERMES_CORE_TOOLS + ["relay_message"],
+        "includes": [],
+    },
 }
+
+
+_ROLE_TOOLSET_MAP: Dict[str, str] = {
+    "client": "client_curated",
+    "tenant_admin": "tenant_admin_bundle",
+    "operator": "operator_bundle",
+}
+
+
+def resolve_toolset_for_role(role) -> List[str]:
+    """Return the list of allowed tool names for the given role string or Role enum."""
+    role_str = role.value if hasattr(role, "value") else str(role)
+    toolset_name = _ROLE_TOOLSET_MAP.get(role_str)
+    if toolset_name is None:
+        raise ValueError(
+            f"Unknown role: {role_str!r}. Expected one of: {list(_ROLE_TOOLSET_MAP)}"
+        )
+    ts = TOOLSETS[toolset_name]
+    return list(ts["tools"])
 
 
 
