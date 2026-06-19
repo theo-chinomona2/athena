@@ -3076,6 +3076,7 @@ class DispatchMiddleware(InboundMiddleware):
 
         _sk = build_session_key(
             ctx.source,
+            agent_id=adapter._agent_id_for_source(ctx.source),
             group_sessions_per_user=adapter.config.extra.get("group_sessions_per_user", True),
             thread_sessions_per_user=adapter.config.extra.get("thread_sessions_per_user", False),
         )

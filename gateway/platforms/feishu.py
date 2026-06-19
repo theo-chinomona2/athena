@@ -3201,6 +3201,7 @@ class FeishuAdapter(BasePlatformAdapter):
 
         session_key = build_session_key(
             event.source,
+            agent_id=self._agent_id_for_source(event.source),
             group_sessions_per_user=self.config.extra.get("group_sessions_per_user", True),
             thread_sessions_per_user=self.config.extra.get("thread_sessions_per_user", False),
         )
@@ -3490,6 +3491,7 @@ class FeishuAdapter(BasePlatformAdapter):
 
         return build_session_key(
             event.source,
+            agent_id=self._agent_id_for_source(event.source),
             group_sessions_per_user=self.config.extra.get("group_sessions_per_user", True),
             thread_sessions_per_user=self.config.extra.get("thread_sessions_per_user", False),
         )
