@@ -514,6 +514,30 @@ class AIAgent:
             logger.debug("SessionDB unavailable for recall", exc_info=True)
             return None
 
+    def _tenant_session_columns(self) -> dict:
+        """Tenant columns to stamp on this agent's sessions row (recall authz).
+
+        Single-tenant / CLI agents (no ``_tenant_id``) return an empty dict so the
+        row's tenant columns stay NULL — the one-time migration backfills those to
+        ``main``.  Multi-tenant agents stamp tenant_id + member/agent parsed from
+        the gateway session-key triple plus the raw key for traceability.
+        """
+        tenant_id = getattr(self, "_tenant_id", None)
+        if not tenant_id:
+            return {}
+        member_id = agent_sub = None
+        sk = getattr(self, "_gateway_session_key", None)
+        if sk:
+            parts = sk.split(":")
+            if len(parts) >= 2 and parts[1].count(".") == 2:
+                _t, member_id, agent_sub = parts[1].split(".")
+        return {
+            "tenant_id": tenant_id,
+            "member_id": member_id,
+            "agent_id": agent_sub,
+            "session_key": sk,
+        }
+
     def _ensure_db_session(self) -> None:
         """Create session DB row on first use. Disables _session_db on failure."""
         if self._session_db_created or not self._session_db:
@@ -529,6 +553,7 @@ class AIAgent:
                 user_id=None,
                 parent_session_id=self._parent_session_id,
                 cwd=_launch_cwd_for_session(source),
+                **self._tenant_session_columns(),
             )
             self._session_db_created = True
         except Exception as e:

@@ -1754,6 +1754,10 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             platform="cron",
             session_id=_cron_session_id,
             session_db=_session_db,
+            # Tenancy: stamp the cron session with the job's tenant so per-tenant
+            # cron runs are isolated in recall (None = legacy operator-global cron).
+            tenant_id=(job.get("tenant") or None),
+            tenant_role=(job.get("role") or None),
         )
         
         # Run the agent with an *inactivity*-based timeout: the job can run
