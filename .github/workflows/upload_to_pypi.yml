@@ -92,9 +92,9 @@ jobs:
     # Publishing is OPT-IN on this fork. To enable: set repo variable
     # PYPI_PUBLISH_ENABLED=true AND (1) rename the package in pyproject.toml to a
     # name you own, (2) configure PyPI Trusted Publishing for
-    # theo-chinomona2/hermes-agent (or add a token). Until then tag pushes still
+    # theo-chinomona2/athena (or add a token). Until then tag pushes still
     # build the wheel artifact but skip publishing (no failures).
-    if: github.repository == 'theo-chinomona2/hermes-agent' && vars.PYPI_PUBLISH_ENABLED == 'true'
+    if: github.repository == 'theo-chinomona2/athena' && vars.PYPI_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: pypi
