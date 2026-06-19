@@ -1,0 +1,38 @@
+# Athena docs site — static nginx behind edge-traefik on the client-apps homelab.
+# TLS terminates at Cloudflare; Traefik routes plain HTTP on the `web` entrypoint.
+# Build context is this dir (website/). Routed at athena.sentiolangley.me.
+services:
+  web-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: athena-docs:prod
+    container_name: athena-docs-prod
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - public-edge
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=public-edge
+      - traefik.http.routers.athena-docs-prod-web.rule=Host(`athena.sentiolangley.me`)
+      - traefik.http.routers.athena-docs-prod-web.entrypoints=web
+      - traefik.http.routers.athena-docs-prod-web.service=athena-docs-prod-web
+      - traefik.http.routers.athena-docs-prod-web.middlewares=athena-docs-prod-https-headers
+      - traefik.http.middlewares.athena-docs-prod-https-headers.headers.customrequestheaders.X-Forwarded-Proto=https
+      - traefik.http.services.athena-docs-prod-web.loadbalancer.server.port=80
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+          cpus: "0.5"
+networks:
+  public-edge:
+    external: true

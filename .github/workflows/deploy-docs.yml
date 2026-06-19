@@ -1,0 +1,44 @@
+name: Deploy Athena Docs
+
+# Builds website/ (Docusaurus) -> nginx and deploys it to the client-apps homelab
+# at athena.sentiolangley.me via the self-hosted runner + edge-traefik.
+# prod = main (and the docs/athena-site source branch until the rebrand lands on main).
+on:
+  push:
+    branches: [main, docs/athena-site]
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-docs-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, client-apps]
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Build and deploy (prod)
+        working-directory: website
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.docs.yml build web-prod
+          docker compose -f docker-compose.docs.yml up -d web-prod
+
+      - name: Verify container is healthy
+        run: |
+          set -euo pipefail
+          sleep 12
+          docker ps --filter "name=athena-docs-prod" --format '{{.Names}} {{.Status}}'
+          # Hit it through the container's published port on the edge network.
+          docker run --rm --network public-edge curlimages/curl:latest \
+            -s -o /dev/null -w "internal http=%{http_code}\n" --max-time 15 \
+            http://athena-docs-prod:80/ || true
