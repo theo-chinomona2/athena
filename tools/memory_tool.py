@@ -52,8 +52,16 @@ logger = logging.getLogger(__name__)
 # (HERMES_HOME env var changes) are always respected.  The old module-level
 # constant was cached at import time and could go stale if a profile switch
 # happened after the first import.
-def get_memory_dir() -> Path:
-    """Return the profile-scoped memories directory."""
+def get_memory_dir(identity_root: "Optional[Path]" = None) -> Path:
+    """Return the memories directory for this identity, or the global fallback.
+
+    When ``identity_root`` is provided (a per-tenant memory path from
+    ``gateway.tenancy.memory_path``), it is used verbatim.  Otherwise the
+    profile-scoped global ``<HERMES_HOME>/memories`` directory is returned —
+    single-tenant installs are unaffected.
+    """
+    if identity_root is not None:
+        return identity_root
     return get_hermes_home() / "memories"
 
 ENTRY_DELIMITER = "\n§\n"
@@ -121,13 +129,27 @@ class MemoryStore:
         Tool responses always reflect this live state.
     """
 
-    def __init__(self, memory_char_limit: int = 2200, user_char_limit: int = 1375):
+    def __init__(self, memory_char_limit: int = 2200, user_char_limit: int = 1375,
+                 identity_root: "Optional[Path]" = None):
         self.memory_entries: List[str] = []
         self.user_entries: List[str] = []
         self.memory_char_limit = memory_char_limit
         self.user_char_limit = user_char_limit
+        # Per-identity memory root (tenant scoping); None = global profile memory.
+        self._identity_root = identity_root
         # Frozen snapshot for system prompt -- set once at load_from_disk()
         self._system_prompt_snapshot: Dict[str, str] = {"memory": "", "user": ""}
+
+    def _mem_dir(self) -> Path:
+        """Resolve this store's memory directory.
+
+        Calls ``get_memory_dir()`` with no argument when there is no per-identity
+        root (the global/single-tenant path), so existing zero-arg stubs/mocks
+        keep working; passes the root only when tenant-scoped.
+        """
+        if self._identity_root is None:
+            return get_memory_dir()
+        return get_memory_dir(self._identity_root)
 
     def load_from_disk(self):
         """Load entries from MEMORY.md and USER.md, capture system prompt snapshot.
@@ -147,7 +169,7 @@ class MemoryStore:
         Scanning is deterministic from disk bytes, so the snapshot remains
         stable for the entire session (prefix-cache invariant holds).
         """
-        mem_dir = get_memory_dir()
+        mem_dir = self._mem_dir()
         mem_dir.mkdir(parents=True, exist_ok=True)
 
         self.memory_entries = self._read_file(mem_dir / "MEMORY.md")
@@ -242,9 +264,8 @@ class MemoryStore:
                     pass
             fd.close()
 
-    @staticmethod
-    def _path_for(target: str) -> Path:
-        mem_dir = get_memory_dir()
+    def _path_for(self, target: str) -> Path:
+        mem_dir = self._mem_dir()
         if target == "user":
             return mem_dir / "USER.md"
         return mem_dir / "MEMORY.md"
@@ -269,7 +290,7 @@ class MemoryStore:
 
     def save_to_disk(self, target: str):
         """Persist entries to the appropriate file. Called after every mutation."""
-        get_memory_dir().mkdir(parents=True, exist_ok=True)
+        self._mem_dir().mkdir(parents=True, exist_ok=True)
         self._write_file(self._path_for(target), self._entries_for(target))
 
     def _entries_for(self, target: str) -> List[str]:
