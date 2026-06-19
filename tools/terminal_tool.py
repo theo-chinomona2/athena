@@ -1031,6 +1031,11 @@ def _resolve_container_task_id(task_id: Optional[str]) -> str:
         overrides = _task_env_overrides[task_id]
         if set(overrides.keys()) & _ISOLATION_KEYS:
             return task_id
+        # Tenancy: a per-session tenant pin gives each tenant its own container
+        # (never the shared "default") so filesystem state is walled per tenant.
+        _tenant = overrides.get("tenant")
+        if _tenant:
+            return f"tenant-{_tenant}"
     return "default"
 
 
@@ -1277,6 +1282,8 @@ def _create_environment(env_type: str, image: str, cwd: str, timeout: int,
             run_as_host_user=cc.get("docker_run_as_host_user", False),
             extra_args=docker_extra_args,
             persist_across_processes=cc.get("docker_persist_across_processes", True),
+            tenant_role=cc.get("tenant_role"),
+            tenant_id=cc.get("tenant"),
         )
     
     elif env_type == "singularity":
