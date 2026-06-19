@@ -619,6 +619,7 @@ def build_session_key(
     source: SessionSource,
     group_sessions_per_user: bool = True,
     thread_sessions_per_user: bool = False,
+    agent_id: str = "main.main.main",
 ) -> str:
     """Build a deterministic session key from a message source.
 
@@ -651,8 +652,8 @@ def build_session_key(
 
         if dm_chat_id:
             if source.thread_id:
-                return f"agent:main:{platform}:dm:{dm_chat_id}:{source.thread_id}"
-            return f"agent:main:{platform}:dm:{dm_chat_id}"
+                return f"agent:{agent_id}:{platform}:dm:{dm_chat_id}:{source.thread_id}"
+            return f"agent:{agent_id}:{platform}:dm:{dm_chat_id}"
         # No chat_id — fall back to the sender's own identifier before the
         # bare per-platform sink.  Without this, every DM from every user that
         # arrives without a chat_id (non-standard adapters / synthetic sources)
@@ -667,11 +668,11 @@ def build_session_key(
             )
         if dm_participant_id:
             if source.thread_id:
-                return f"agent:main:{platform}:dm:{dm_participant_id}:{source.thread_id}"
-            return f"agent:main:{platform}:dm:{dm_participant_id}"
+                return f"agent:{agent_id}:{platform}:dm:{dm_participant_id}:{source.thread_id}"
+            return f"agent:{agent_id}:{platform}:dm:{dm_participant_id}"
         if source.thread_id:
-            return f"agent:main:{platform}:dm:{source.thread_id}"
-        return f"agent:main:{platform}:dm"
+            return f"agent:{agent_id}:{platform}:dm:{source.thread_id}"
+        return f"agent:{agent_id}:{platform}:dm"
 
     participant_id = source.user_id_alt or source.user_id
     if participant_id and source.platform == Platform.WHATSAPP:
@@ -679,7 +680,7 @@ def build_session_key(
         # single group member gets two isolated per-user sessions when the
         # bridge reshuffles alias forms.
         participant_id = canonical_whatsapp_identifier(str(participant_id)) or participant_id
-    key_parts = ["agent:main", platform, source.chat_type]
+    key_parts = [f"agent:{agent_id}", platform, source.chat_type]
 
     if source.chat_id:
         key_parts.append(source.chat_id)
@@ -775,12 +776,13 @@ class SessionStore:
                 logger.debug("Could not remove temp file %s: %s", tmp_path, e)
             raise
     
-    def _generate_session_key(self, source: SessionSource) -> str:
+    def _generate_session_key(self, source: SessionSource, agent_id: str = "main.main.main") -> str:
         """Generate a session key from a source."""
         return build_session_key(
             source,
             group_sessions_per_user=getattr(self.config, "group_sessions_per_user", True),
             thread_sessions_per_user=getattr(self.config, "thread_sessions_per_user", False),
+            agent_id=agent_id,
         )
     
     def _is_session_expired(self, entry: SessionEntry) -> bool:
