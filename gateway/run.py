@@ -14822,6 +14822,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             # Single-tenant (identity is None) keeps existing behavior untouched.
             _identity = self._resolve_identity(source)
             _tenant_id_for_agent = None
+            _tenant_role_for_agent = None
             _memory_root_for_agent = None
             _effective_toolsets = enabled_toolsets
             if _identity is not None:
@@ -14830,6 +14831,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     from toolsets import toolset_name_for_role
                     from hermes_constants import get_hermes_home
                     _tenant_id_for_agent = _identity.tenant
+                    _tenant_role_for_agent = _identity.role.value
                     _memory_root_for_agent = memory_path(get_hermes_home(), _identity)
                     _effective_toolsets = [toolset_name_for_role(_identity.role)]
                 except Exception:
@@ -14938,6 +14940,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     fallback_model=self._fallback_model,
                     tenant_id=_tenant_id_for_agent,
                     memory_root=_memory_root_for_agent,
+                    tenant_role=_tenant_role_for_agent,
                 )
                 if _cache_lock and _cache is not None:
                     with _cache_lock:

@@ -225,6 +225,7 @@ def init_agent(
     pass_session_id: bool = False,
     tenant_id: str = None,
     memory_root=None,
+    tenant_role: str = None,
 ):
     """
     Initialize the AI Agent.
@@ -308,6 +309,7 @@ def init_agent(
     agent.pass_session_id = pass_session_id
     agent._tenant_id = tenant_id  # Tenant slug for recall/tool authz (None = single-tenant)
     agent._memory_root = memory_root  # Per-identity memory root (None = global profile memory)
+    agent._tenant_role = tenant_role  # Role string for tool authz ("operator"/"tenant_admin"/"client")
     agent._credential_pool = credential_pool
     agent.log_prefix_chars = log_prefix_chars
     agent.log_prefix = f"{log_prefix} " if log_prefix else ""

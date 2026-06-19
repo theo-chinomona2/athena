@@ -997,6 +997,11 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                     sort=next_args.get("sort"),
                     db=session_db,
                     current_session_id=agent.session_id,
+                    tenant_id=(
+                        None
+                        if getattr(agent, "_tenant_role", None) == "operator"
+                        else getattr(agent, "_tenant_id", None)
+                    ),
                 )
             function_result, function_args = _run_agent_tool_execution_middleware(
                 agent,

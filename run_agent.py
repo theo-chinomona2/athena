@@ -414,6 +414,7 @@ class AIAgent:
         pass_session_id: bool = False,
         tenant_id: str = None,
         memory_root=None,
+        tenant_role: str = None,
     ):
         """Forwarder — see ``agent.agent_init.init_agent``."""
         from agent.agent_init import init_agent
@@ -491,6 +492,7 @@ class AIAgent:
             pass_session_id=pass_session_id,
             tenant_id=tenant_id,
             memory_root=memory_root,
+            tenant_role=tenant_role,
         )
 
     def _get_session_db_for_recall(self):

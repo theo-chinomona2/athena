@@ -1243,6 +1243,7 @@ def _build_child_agent(
         # derived from the parent (child_toolsets) so no role escalation.
         tenant_id=getattr(parent_agent, "_tenant_id", None),
         memory_root=getattr(parent_agent, "_memory_root", None),
+        tenant_role=getattr(parent_agent, "_tenant_role", None),
     )
     child._print_fn = getattr(parent_agent, "_print_fn", None)
     # Now the child exists, its session id can ride on every relayed event
