@@ -625,6 +625,21 @@ def resolve_toolset_for_role(role) -> List[str]:
     return list(ts["tools"])
 
 
+def toolset_name_for_role(role) -> str:
+    """Return the TOOLSET name (e.g. ``operator_bundle``) for a role.
+
+    Used by the gateway to set ``enabled_toolsets`` (which takes toolset names,
+    not tool names) to the role's allow-list bundle.
+    """
+    role_str = role.value if hasattr(role, "value") else str(role)
+    name = _ROLE_TOOLSET_MAP.get(role_str)
+    if name is None:
+        raise ValueError(
+            f"Unknown role: {role_str!r}. Expected one of: {list(_ROLE_TOOLSET_MAP)}"
+        )
+    return name
+
+
 
 def get_toolset(name: str) -> Optional[Dict[str, Any]]:
     """

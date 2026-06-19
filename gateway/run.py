@@ -2257,6 +2257,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         self._restart_drain_timeout = self._load_restart_drain_timeout()
         self._provider_routing = self._load_provider_routing()
         self._fallback_model = self._load_fallback_model()
+        self._tenant_config = self._load_tenant_config()
 
         # Wire process registry into session store for reset protection
         from tools.process_registry import process_registry
@@ -2785,9 +2786,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
 
     def _session_key_for_source(self, source: SessionSource) -> str:
         """Resolve the current session key for a source, honoring gateway config when available."""
+        from gateway.routing import agent_id_for_source
+        agent_id = agent_id_for_source(source, getattr(self, "_tenant_config", None))
         if hasattr(self, "session_store") and self.session_store is not None:
             try:
-                session_key = self.session_store._generate_session_key(source)
+                session_key = self.session_store._generate_session_key(source, agent_id=agent_id)
                 if isinstance(session_key, str) and session_key:
                     return session_key
             except Exception:
@@ -2797,7 +2800,79 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             source,
             group_sessions_per_user=getattr(config, "group_sessions_per_user", True),
             thread_sessions_per_user=getattr(config, "thread_sessions_per_user", False),
+            agent_id=agent_id,
         )
+
+    @staticmethod
+    def _load_tenant_config() -> "TenantConfig":
+        """Load multi-tenant config (tenants + bindings) from config.yaml.
+
+        Empty by default — single-tenant installs have no ``tenants``/``bindings``
+        keys and behave exactly as before (agent_id = ``main.main.main``, no role
+        gating, global memory).
+        """
+        from gateway.tenancy import TenantConfig, TenantDef, MemberDef, TenantBinding
+        try:
+            import yaml as _y
+            cfg_path = _hermes_home / "config.yaml"
+            if not cfg_path.exists():
+                return TenantConfig()
+            with open(cfg_path, encoding="utf-8") as _f:
+                cfg = _y.safe_load(_f) or {}
+        except Exception:
+            return TenantConfig()
+        tenants_raw = cfg.get("tenants", []) or []
+        bindings_raw = cfg.get("bindings", []) or []
+        tenants = [
+            TenantDef(
+                id=t["id"],
+                members=[
+                    MemberDef(
+                        id=m["id"],
+                        role=m.get("role", "client"),
+                        default_agent=m.get("default_agent", "main"),
+                    )
+                    for m in (t.get("members") or [])
+                    if isinstance(m, dict) and m.get("id")
+                ],
+            )
+            for t in tenants_raw
+            if isinstance(t, dict) and t.get("id")
+        ]
+        bindings = [
+            TenantBinding(
+                source_id=str(b["source_id"]),
+                tenant=b["tenant"],
+                member=b["member"],
+                agent=b["agent"],
+            )
+            for b in bindings_raw
+            if isinstance(b, dict)
+            and b.get("source_id") and b.get("tenant")
+            and b.get("member") and b.get("agent")
+        ]
+        return TenantConfig(tenants=tenants, bindings=bindings)
+
+    def _resolve_identity(self, source: SessionSource):
+        """Resolve the TenantIdentity for a source, or None when tenancy is disabled.
+
+        Returns None for single-tenant installs (no tenants/bindings configured)
+        so the operator keeps full tools, global memory, and legacy behavior.
+        """
+        config = getattr(self, "_tenant_config", None)
+        if not config or (not config.tenants and not config.bindings):
+            return None
+        try:
+            from gateway.routing import resolve_identity_from_source
+            return resolve_identity_from_source(source, config)
+        except Exception:
+            logger.debug("identity resolution failed for source", exc_info=True)
+            return None
+
+    def _agent_id_for_source(self, source: SessionSource) -> str:
+        """Return the session-key agent_id triple for a source ("main.main.main" when tenancy off)."""
+        from gateway.routing import agent_id_for_source
+        return agent_id_for_source(source, getattr(self, "_tenant_config", None))
 
     def _telegram_topic_mode_enabled(self, source: SessionSource) -> bool:
         """Return whether Telegram DM topic mode is active for this chat."""
@@ -5259,6 +5334,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 success = await self._connect_adapter_with_timeout(adapter, platform)
                 if success:
                     self.adapters[platform] = adapter
+                    adapter._tenant_config = self._tenant_config
                     self._sync_voice_mode_state_to_adapter(adapter)
                     connected_count += 1
                     self._update_platform_runtime_status(
@@ -5662,6 +5738,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             dest_source,
             group_sessions_per_user=extra.get("group_sessions_per_user", True),
             thread_sessions_per_user=extra.get("thread_sessions_per_user", False),
+            agent_id=self._agent_id_for_source(dest_source),
         )
 
         # Make sure there's an entry in the session_store for this key. If
@@ -5994,6 +6071,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     success = await self._connect_adapter_with_timeout(adapter, platform)
                     if success:
                         self.adapters[platform] = adapter
+                        adapter._tenant_config = self._tenant_config
                         self._sync_voice_mode_state_to_adapter(adapter)
                         self.delivery_router.adapters = self.adapters
                         del self._failed_platforms[platform]
@@ -12873,6 +12951,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         cache_keys: dict | None = None,
         user_id: str | None = None,
         user_id_alt: str | None = None,
+        tenant_id: str | None = None,
     ) -> str:
         """Compute a stable string key from agent config values.
 
@@ -12926,6 +13005,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 _cache_keys_sorted,
                 str(user_id or ""),
                 str(user_id_alt or ""),
+                str(tenant_id or ""),
             ],
             sort_keys=True,
             default=str,
@@ -14735,6 +14815,24 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
 
             turn_route = self._resolve_turn_agent_config(message, model, runtime_kwargs)
 
+            # Multi-tenant: scope toolset policy, memory root, and tenant id to
+            # the resolved identity.  Identity is stable for the conversation, so
+            # the bundle/tenant_id stay byte-stable across turns (cache-safe).
+            # Single-tenant (identity is None) keeps existing behavior untouched.
+            _identity = self._resolve_identity(source)
+            _tenant_id_for_agent = None
+            _memory_root_for_agent = None
+            if _identity is not None:
+                try:
+                    from gateway.tenancy import memory_path
+                    from toolsets import toolset_name_for_role
+                    from hermes_constants import get_hermes_home
+                    _tenant_id_for_agent = _identity.tenant
+                    _memory_root_for_agent = memory_path(get_hermes_home(), _identity)
+                    enabled_toolsets = [toolset_name_for_role(_identity.role)]
+                except Exception:
+                    logger.debug("tenant runtime scoping failed", exc_info=True)
+
             # Check agent cache — reuse the AIAgent from the previous message
             # in this session to preserve the frozen system prompt and tool
             # schemas for prompt cache hits.
@@ -14746,6 +14844,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 cache_keys=self._extract_cache_busting_config(user_config),
                 user_id=getattr(source, "user_id", None),
                 user_id_alt=getattr(source, "user_id_alt", None),
+                tenant_id=_tenant_id_for_agent,
             )
             agent = None
             _cache_lock = getattr(self, "_agent_cache_lock", None)
@@ -14835,6 +14934,8 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                     gateway_session_key=session_key,
                     session_db=self._session_db,
                     fallback_model=self._fallback_model,
+                    tenant_id=_tenant_id_for_agent,
+                    memory_root=_memory_root_for_agent,
                 )
                 if _cache_lock and _cache is not None:
                     with _cache_lock:

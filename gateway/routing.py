@@ -23,3 +23,17 @@ def resolve_identity_from_source(source: SessionSource, config: TenantConfig) ->
     """Resolve an inbound message source to a TenantIdentity via config bindings."""
     source_id = _canonical_source_id(source)
     return resolve_identity(source_id, config)
+
+
+def agent_id_for_source(source: SessionSource, config: "TenantConfig | None") -> str:
+    """Return the session-key agent_id (triple) for a source.
+
+    Single source of truth shared by the gateway runner AND every platform
+    adapter so all session-key sites agree (no split-brain busy-guard /
+    interrupt / pending-queue state).  When tenancy is not configured (no
+    tenants and no bindings) returns the legacy default ``"main.main.main"`` so
+    single-tenant installs are unaffected.
+    """
+    if not config or (not config.tenants and not config.bindings):
+        return "main.main.main"
+    return resolve_identity_from_source(source, config).triple

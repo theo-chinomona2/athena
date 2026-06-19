@@ -554,5 +554,12 @@ def test_parse_session_key_too_short():
 
 
 def test_parse_session_key_wrong_prefix():
+    # parts[0] must be "agent"; a non-agent prefix is rejected.
     assert _parse_session_key("cron:main:telegram:dm:123") is None
-    assert _parse_session_key("agent:cron:telegram:dm:123") is None
+    # parts[1] is now an arbitrary agent_id triple (tenant.member.agent), so any
+    # non-empty value is accepted and platform/chat_type/chat_id are extracted.
+    assert _parse_session_key("agent:theo.theo.coding:telegram:dm:123") == {
+        "platform": "telegram",
+        "chat_type": "dm",
+        "chat_id": "123",
+    }

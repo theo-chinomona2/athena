@@ -54,14 +54,14 @@ class TestInterruptKeyConsistency:
         source = _source("123456", "dm")
         session_key = build_session_key(source)
         assert session_key != source.chat_id
-        assert session_key == "agent:main:telegram:dm:123456"
+        assert session_key == "agent:main.main.main:telegram:dm:123456"
 
     def test_session_key_differs_from_chat_id_for_group(self):
         """Session key for a group chat includes prefix, unlike raw chat_id."""
         source = _source("-1001234", "group")
         session_key = build_session_key(source)
         assert session_key != source.chat_id
-        assert "agent:main:" in session_key
+        assert "agent:main.main.main:" in session_key
         assert source.chat_id in session_key
 
     @pytest.mark.asyncio
