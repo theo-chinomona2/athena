@@ -200,6 +200,45 @@ class TestIsContainer:
         monkeypatch.setattr("builtins.open", _fake_open)
         assert is_container() is True
 
+    def test_docker_host_is_not_a_container(self, monkeypatch, tmp_path):
+        """A host that merely runs Docker/containerd is NOT a container.
+
+        Regression (#47111 follow-up): the containerd snapshotter's image
+        mounts live under ``/var/lib/docker/...`` and name ``containerd`` in
+        their overlay ``lowerdir`` options, so a whole-file substring scan of
+        ``/proc/self/mountinfo`` flagged every Docker *host* as a container —
+        wrongly flipping the dashboard update flow and subprocess HOME
+        resolution into container mode. Only the runtime-owned ROOT (``/``)
+        mount marks a real container; a host's root stays a block device.
+        """
+        import builtins
+        self._reset_cache(monkeypatch)
+        monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
+        monkeypatch.setattr(os.path, "exists", lambda p: False)
+        cgroup_file = tmp_path / "cgroup"
+        cgroup_file.write_text("0::/\n")  # cgroup v2 — no runtime marker
+        mountinfo_file = tmp_path / "mountinfo"
+        mountinfo_file.write_text(
+            # real host root is a block device — no runtime marker
+            "33 2 259:5 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p5 rw\n"
+            # docker/containerd image mount: marker present, but mount point is
+            # /var/lib/docker/..., NOT the root, so it must not count.
+            "658 33 0:59 / /var/lib/docker/rootfs/overlayfs/abc rw - overlay "
+            "overlay rw,lowerdir=/var/lib/containerd/io.containerd.snapshotter"
+            ".v1.overlayfs/snapshots/1/fs\n"
+        )
+        _real_open = builtins.open
+
+        def _fake_open(p, *a, **kw):
+            if p == "/proc/1/cgroup":
+                return _real_open(str(cgroup_file), *a, **kw)
+            if p == "/proc/self/mountinfo":
+                return _real_open(str(mountinfo_file), *a, **kw)
+            return _real_open(p, *a, **kw)
+
+        monkeypatch.setattr("builtins.open", _fake_open)
+        assert is_container() is False
+
     def test_caches_result(self, monkeypatch):
         """Second call uses cached value without re-probing."""
         monkeypatch.setattr(hermes_constants, "_container_detected", True)
