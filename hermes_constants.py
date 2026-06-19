@@ -471,7 +471,10 @@ def is_container() -> bool:
     Kubernetes/k3s) were previously missed. To cover those, also check:
       * ``KUBERNETES_SERVICE_HOST`` env var — set in every Kubernetes pod.
       * ``kubepods`` / ``containerd`` / ``crio`` markers in ``/proc/1/cgroup``.
-      * the same markers in ``/proc/self/mountinfo`` (cgroup-v2 fallback).
+      * those markers on the **root (``/``) mount** in ``/proc/self/mountinfo``
+        (cgroup-v2 fallback). Scoped to root so a *host* running
+        Docker/containerd — which names ``containerd`` only on its
+        ``/var/lib/...`` image mounts — is not misread as a container.
 
     Result is cached for the process lifetime.  Import-safe — no heavy deps.
 
@@ -499,15 +502,26 @@ def is_container() -> bool:
                 return True
     except OSError:
         pass
-    # cgroup v2: /proc/1/cgroup is just "0::/" with no marker. The container
-    # runtime still shows up in the mount table (overlay rootfs, runtime mount
-    # paths), so scan mountinfo as a last resort.
+    # cgroup v2: /proc/1/cgroup is just "0::/" with no marker. Inside a pod the
+    # container runtime owns the ROOT mount ("/") — an overlay whose rootfs path
+    # (or overlay options) carries the kubepods/containerd/crio marker. A host
+    # that merely *runs* Docker/containerd also names those markers in
+    # mountinfo, but only on the daemon's image/service mounts under
+    # /var/lib/... — its real root stays a block device (ext4/btrfs/xfs). A
+    # whole-file substring scan therefore misread every Docker host as a
+    # container, wrongly flipping the dashboard update flow and subprocess HOME
+    # resolution into container mode. Scope the scan to the root mount line so
+    # only a runtime-owned root counts. See #47111.
     try:
         with open("/proc/self/mountinfo", "r", encoding="utf-8") as f:
-            mountinfo = f.read()
-            if any(marker in mountinfo for marker in ("kubepods", "containerd", "crio")):
-                _container_detected = True
-                return True
+            for line in f:
+                parts = line.split()
+                # mountinfo field 5 (index 4) is the mount point.
+                if len(parts) > 4 and parts[4] == "/" and any(
+                    marker in line for marker in ("kubepods", "containerd", "crio")
+                ):
+                    _container_detected = True
+                    return True
     except OSError:
         pass
     _container_detected = False
