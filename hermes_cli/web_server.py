@@ -219,6 +219,17 @@ app = FastAPI(title="Hermes Agent", version=__version__, lifespan=_lifespan)
 _SESSION_TOKEN = os.environ.get("HERMES_DASHBOARD_SESSION_TOKEN") or secrets.token_urlsafe(32)
 _SESSION_HEADER_NAME = "X-Hermes-Session-Token"
 
+# Register the operator's loopback token in the per-tenant registry so the
+# single-token loopback path is just one identity (tenant "main", role
+# operator) alongside any per-tenant tokens minted via
+# ``dashboard_auth.issue_token()``.  Additive: the constant-time operator
+# compares below still run first; verify_token only widens acceptance.
+from hermes_cli.dashboard_auth import tenant_tokens as _dashboard_auth
+
+_dashboard_auth.issue_token(
+    "main", "operator", ttl_s=10 * 365 * 24 * 3600, token=_SESSION_TOKEN
+)
+
 # In-browser Chat tab (/chat, /api/pty, /api/ws, …).  Always enabled: the
 # desktop app and the dashboard's own Chat tab both drive the agent over the
 # `/api/ws` + `/api/pty` WebSockets, so the embedded-chat surface is an
@@ -278,7 +289,16 @@ def _has_valid_session_token(request: Request) -> bool:
 
     auth = request.headers.get("authorization", "")
     expected = f"Bearer {_SESSION_TOKEN}"
-    return hmac.compare_digest(auth.encode(), expected.encode())
+    if hmac.compare_digest(auth.encode(), expected.encode()):
+        return True
+
+    # Per-tenant tokens issued via dashboard_auth authenticate too (the
+    # connection's tenant identity is resolved from the registry entry).
+    if session_header and _dashboard_auth.verify_token(session_header):
+        return True
+    if auth.startswith("Bearer ") and _dashboard_auth.verify_token(auth[len("Bearer "):]):
+        return True
+    return False
 
 
 # Routes that may also authenticate via a ``?token=`` query param, for download
@@ -291,7 +311,11 @@ def _has_valid_query_token(request: Request, path: str) -> bool:
     if path not in _QUERY_TOKEN_API_PATHS:
         return False
     token = request.query_params.get("token", "")
-    return bool(token) and hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode())
+    if not token:
+        return False
+    if hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        return True
+    return bool(_dashboard_auth.verify_token(token))
 
 
 def _require_token(request: Request) -> None:
@@ -10802,6 +10826,9 @@ def _ws_auth_reason(ws: "WebSocket") -> tuple[Optional[str], str]:
     if not token:
         return "no_credential", "none"
     if hmac.compare_digest(token.encode(), _SESSION_TOKEN.encode()):
+        return None, "token"
+    # Per-tenant tokens (dashboard_auth registry) authenticate too.
+    if _dashboard_auth.verify_token(token):
         return None, "token"
     return "token_mismatch", "token"
 
