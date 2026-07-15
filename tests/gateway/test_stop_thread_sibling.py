@@ -86,7 +86,7 @@ def test_sibling_returns_empty_for_non_thread_source():
         )
     )
     runner._running_agents = {grp_b: _FakeAgent()}
-    assert runner._sibling_thread_run_keys(nonthread, "agent:main.main.main:discord:group:chan1:userA") == []
+    assert runner._sibling_thread_run_keys(nonthread, "agent:main:discord:group:chan1:userA") == []
 
 
 # ---------------------------------------------------------------------------

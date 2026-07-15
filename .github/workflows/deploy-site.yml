@@ -39,14 +39,14 @@ jobs:
     # main commit needs to ship live before the next release tag — e.g.
     # a skills-index PR that doesn't touch website/** paths and so
     # doesn't auto-deploy via the deploy-docs path.
-    if: (github.event_name == 'release' || github.event_name == 'workflow_dispatch') && vars.VERCEL_ENABLED == 'true'
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Vercel Deploy
         run: curl -X POST "${{ secrets.VERCEL_DEPLOY_HOOK }}"
 
   deploy-docs:
-    if: github.repository == 'theo-chinomona2/athena'
+    if: github.repository == 'NousResearch/hermes-agent'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
